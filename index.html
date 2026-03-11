@@ -132,6 +132,19 @@
     .add-device-btn:hover { opacity: 0.88; }
     .loc-actions { display: flex; gap: 6px; }
 
+    /* ── MULTI SELECT ── */
+    .device-chip.selectable { cursor: pointer; }
+    .device-chip.selectable:hover { border-color: var(--accent); background: var(--accent-light); }
+    .device-chip.selected { border-color: var(--accent); background: var(--accent-light); box-shadow: 0 0 0 2px rgba(91,154,191,0.3); }
+    .device-chip.selected .chip-check { color: var(--accent); }
+    .chip-check { font-size: 13px; color: var(--border2); transition: color 0.15s; }
+    .select-bar { display: none; align-items: center; gap: 8px; margin-bottom: 10px; padding: 8px 12px; background: var(--accent-light); border: 1px solid var(--accent); border-radius: 8px; flex-wrap: wrap; }
+    .select-bar.active { display: flex; }
+    .select-bar-label { font-size: 12px; font-weight: 600; color: var(--accent); flex: 1; }
+    .btn-select-toggle { background: none; border: 1px solid var(--border2); color: var(--text2); border-radius: 6px; padding: 5px 10px; font-size: 11px; font-weight: 600; cursor: pointer; font-family: 'Inter', sans-serif; transition: 0.15s; }
+    .btn-select-toggle:hover { border-color: var(--accent); color: var(--accent); }
+    .btn-select-toggle.active { border-color: var(--accent); color: var(--accent); background: var(--accent-light); }
+
     /* ── EMPTY STATE ── */
     .empty-loc { color: var(--text2); font-size: 12px; font-style: italic; padding: 4px 0 8px; }
 
@@ -435,6 +448,7 @@
                     </div>
                     <div class="loc-header-right">
                         <div class="loc-actions" onclick="event.stopPropagation()">
+                            <button class="btn-select-toggle" id="selbtn-${loc.id}" onclick="toggleSelectMode(${loc.id})">☑ Select</button>
                             <button class="btn-ghost" onclick="openRenameLocation(${loc.id},'${escQ(loc.name)}')">✏️ Rename</button>
                             <button class="btn-danger" onclick="deleteLocation(${loc.id},'${escQ(loc.name)}')">🗑 Delete</button>
                         </div>
@@ -442,7 +456,13 @@
                     </div>
                 </div>
                 <div class="loc-body">
-                    <div class="device-grid">
+                    <div class="select-bar" id="selbar-${loc.id}">
+                        <span class="select-bar-label" id="sellabel-${loc.id}">0 selected</span>
+                        <button class="btn-ghost" onclick="selectAll(${loc.id})">Select All</button>
+                        <button class="btn-ghost" onclick="deselectAll(${loc.id})">Deselect All</button>
+                        <button class="btn-primary" onclick="openBulkMove(${loc.id})" style="padding:6px 12px;font-size:12px;">⇄ Move Selected</button>
+                    </div>
+                    <div class="device-grid" id="devgrid-${loc.id}">
                         ${chips || `<span class="empty-loc">No devices assigned yet.</span>`}
                     </div>
                     <div class="add-device-row">
@@ -517,11 +537,23 @@
     // ── DELETE LOCATION ──
     function deleteLocation(id, name) {
         const count = _devices.filter(d => d.location_id === id).length;
+        if (count > 0) {
+            showModal(`
+                <h3>🚫 Cannot Delete Location</h3>
+                <p style="color:var(--text2);font-size:13px;margin-bottom:16px;">
+                    <strong style="color:var(--text)">${name}</strong> still has <strong style="color:var(--high)">${count} device(s)</strong> assigned to it.<br><br>
+                    Please move or remove all devices first before deleting this location.
+                </p>
+                <div class="modal-actions">
+                    <button class="modal-confirm" onclick="closeModal()">Got it</button>
+                </div>
+            `);
+            return;
+        }
         showModal(`
             <h3>🗑 Delete Location</h3>
             <p style="color:var(--text2);font-size:13px;margin-bottom:16px;">
-                Delete <strong style="color:var(--text)">${name}</strong>?
-                ${count > 0 ? `<br><br><span style="color:var(--high)">⚠️ This location has <strong>${count} device(s)</strong>. They will become unassigned.</span>` : ''}
+                Delete <strong style="color:var(--text)">${name}</strong>? This location has no devices.
             </p>
             <div class="modal-actions">
                 <button class="modal-cancel" onclick="closeModal()">Cancel</button>
@@ -607,6 +639,111 @@
         const { error } = await sb.from('devices').delete().eq('id', id);
         if (error) { toast('Error: ' + error.message, 'error'); return; }
         toast(`${serial} removed.`, 'info');
+        await loadData();
+    }
+
+    // ── MULTI SELECT ──
+    const _selectMode = {}; // locId -> bool
+    const _selected = {};   // locId -> Set of device ids
+
+    function toggleSelectMode(locId) {
+        _selectMode[locId] = !_selectMode[locId];
+        _selected[locId] = new Set();
+        const btn = document.getElementById(`selbtn-${locId}`);
+        const bar = document.getElementById(`selbar-${locId}`);
+        const grid = document.getElementById(`devgrid-${locId}`);
+        if (_selectMode[locId]) {
+            btn.classList.add('active');
+            btn.textContent = '✕ Cancel';
+            bar.classList.add('active');
+            grid?.querySelectorAll('.device-chip').forEach(chip => {
+                chip.classList.add('selectable');
+                chip.querySelector('.chip-check').textContent = '☐';
+                chip.querySelector('.chip-move').style.display = 'none';
+                chip.querySelector('.chip-del').style.display = 'none';
+            });
+        } else {
+            btn.classList.remove('active');
+            btn.textContent = '☑ Select';
+            bar.classList.remove('active');
+            grid?.querySelectorAll('.device-chip').forEach(chip => {
+                chip.classList.remove('selectable','selected');
+                chip.querySelector('.chip-check').textContent = '☐';
+                chip.querySelector('.chip-move').style.display = '';
+                chip.querySelector('.chip-del').style.display = '';
+            });
+        }
+    }
+
+    function chipClick(e, devId, locId) {
+        if (!_selectMode[locId]) return;
+        e.stopPropagation();
+        if (!_selected[locId]) _selected[locId] = new Set();
+        const chip = document.getElementById(`chip-${devId}`);
+        if (_selected[locId].has(devId)) {
+            _selected[locId].delete(devId);
+            chip.classList.remove('selected');
+            chip.querySelector('.chip-check').textContent = '☐';
+        } else {
+            _selected[locId].add(devId);
+            chip.classList.add('selected');
+            chip.querySelector('.chip-check').textContent = '☑';
+        }
+        const count = _selected[locId].size;
+        document.getElementById(`sellabel-${locId}`).textContent = `${count} selected`;
+    }
+
+    function selectAll(locId) {
+        if (!_selected[locId]) _selected[locId] = new Set();
+        const grid = document.getElementById(`devgrid-${locId}`);
+        grid?.querySelectorAll('.device-chip').forEach(chip => {
+            const id = parseInt(chip.id.replace('chip-',''));
+            _selected[locId].add(id);
+            chip.classList.add('selected');
+            chip.querySelector('.chip-check').textContent = '☑';
+        });
+        document.getElementById(`sellabel-${locId}`).textContent = `${_selected[locId].size} selected`;
+    }
+
+    function deselectAll(locId) {
+        if (!_selected[locId]) _selected[locId] = new Set();
+        _selected[locId].clear();
+        const grid = document.getElementById(`devgrid-${locId}`);
+        grid?.querySelectorAll('.device-chip').forEach(chip => {
+            chip.classList.remove('selected');
+            chip.querySelector('.chip-check').textContent = '☐';
+        });
+        document.getElementById(`sellabel-${locId}`).textContent = '0 selected';
+    }
+
+    function openBulkMove(locId) {
+        const sel = _selected[locId];
+        if (!sel || sel.size === 0) { toast('No devices selected.', 'info'); return; }
+        const options = _locations.filter(l => l.id !== locId)
+            .map(l => `<option value="${l.id}">${l.name}</option>`).join('');
+        if (!options) { toast('No other locations available.', 'info'); return; }
+        showModal(`
+            <h3>⇄ Move ${sel.size} Device${sel.size > 1 ? 's' : ''}</h3>
+            <p style="color:var(--text2);font-size:13px;margin-bottom:14px;">Move <strong style="color:var(--text)">${sel.size} selected device${sel.size > 1 ? 's' : ''}</strong> to:</p>
+            <label>Destination Location</label>
+            <select id="mBulkLoc">${options}</select>
+            <div class="modal-actions">
+                <button class="modal-cancel" onclick="closeModal()">Cancel</button>
+                <button class="modal-confirm" onclick="confirmBulkMove(${locId})">Move All</button>
+            </div>
+        `);
+    }
+
+    async function confirmBulkMove(locId) {
+        const newLocId = parseInt(document.getElementById('mBulkLoc').value);
+        const ids = [..._selected[locId]];
+        closeModal();
+        const { error } = await sb.from('devices').update({ location_id: newLocId }).in('id', ids);
+        if (error) { toast('Error: ' + error.message, 'error'); return; }
+        const newLoc = _locations.find(l => l.id === newLocId);
+        toast(`${ids.length} device${ids.length > 1 ? 's' : ''} moved to "${newLoc?.name}".`);
+        _selectMode[locId] = false;
+        _selected[locId] = new Set();
         await loadData();
     }
 
