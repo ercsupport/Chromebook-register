@@ -431,10 +431,11 @@
             const locDevs = devs.filter(d => d.location_id === loc.id);
             const chips = locDevs.map(d => {
                 const serial = highlight ? highlightText(d.serial_number, highlight) : d.serial_number;
-                return `<div class="device-chip" title="${d.serial_number}">
+                return `<div class="device-chip" id="chip-${d.id}" data-devid="${d.id}" data-locid="${loc.id}" title="${d.serial_number}">
+                    <span class="chip-check">&#9744;</span>
                     <span>${serial}</span>
-                    <button class="chip-move" onclick="openMoveDevice(${d.id},'${d.serial_number}',${loc.id})" title="Move to another location">⇄</button>
-                    <button class="chip-del" onclick="deleteDevice(${d.id},'${d.serial_number}')" title="Remove device">✕</button>
+                    <button class="chip-move" onclick="openMoveDevice(${d.id},'${d.serial_number}',${loc.id})" title="Move to another location">&#8644;</button>
+                    <button class="chip-del" onclick="deleteDevice(${d.id},'${d.serial_number}')" title="Remove device">&#x2715;</button>
                 </div>`;
             }).join('');
 
@@ -668,39 +669,51 @@
             bar.classList.remove('active');
             grid?.querySelectorAll('.device-chip').forEach(chip => {
                 chip.classList.remove('selectable','selected');
-                chip.querySelector('.chip-check').textContent = '☐';
+                chip.querySelector('.chip-check').innerHTML = '&#9744;';
                 chip.querySelector('.chip-move').style.display = '';
                 chip.querySelector('.chip-del').style.display = '';
             });
         }
     }
 
-    function chipClick(e, devId, locId) {
+    function chipClick(devId, locId) {
         if (!_selectMode[locId]) return;
-        e.stopPropagation();
         if (!_selected[locId]) _selected[locId] = new Set();
         const chip = document.getElementById(`chip-${devId}`);
         if (_selected[locId].has(devId)) {
             _selected[locId].delete(devId);
             chip.classList.remove('selected');
-            chip.querySelector('.chip-check').textContent = '☐';
+            chip.querySelector('.chip-check').innerHTML = '&#9744;';
         } else {
             _selected[locId].add(devId);
             chip.classList.add('selected');
-            chip.querySelector('.chip-check').textContent = '☑';
+            chip.querySelector('.chip-check').innerHTML = '&#9745;';
         }
         const count = _selected[locId].size;
         document.getElementById(`sellabel-${locId}`).textContent = `${count} selected`;
     }
 
+    // Event delegation on device grids for selection clicks
+    document.addEventListener('click', function(e) {
+        const chip = e.target.closest('.device-chip');
+        if (!chip) return;
+        const devId = parseInt(chip.dataset.devid);
+        const locId = parseInt(chip.dataset.locid);
+        if (!_selectMode[locId]) return;
+        // Don't trigger if clicking the hidden buttons accidentally
+        if (e.target.classList.contains('chip-move') || e.target.classList.contains('chip-del')) return;
+        chipClick(devId, locId);
+    });
+
     function selectAll(locId) {
         if (!_selected[locId]) _selected[locId] = new Set();
         const grid = document.getElementById(`devgrid-${locId}`);
         grid?.querySelectorAll('.device-chip').forEach(chip => {
-            const id = parseInt(chip.id.replace('chip-',''));
+            const id = parseInt(chip.dataset.devid);
+            if (!id) return;
             _selected[locId].add(id);
             chip.classList.add('selected');
-            chip.querySelector('.chip-check').textContent = '☑';
+            chip.querySelector('.chip-check').innerHTML = '&#9745;';
         });
         document.getElementById(`sellabel-${locId}`).textContent = `${_selected[locId].size} selected`;
     }
@@ -711,7 +724,7 @@
         const grid = document.getElementById(`devgrid-${locId}`);
         grid?.querySelectorAll('.device-chip').forEach(chip => {
             chip.classList.remove('selected');
-            chip.querySelector('.chip-check').textContent = '☐';
+            chip.querySelector('.chip-check').innerHTML = '&#9744;';
         });
         document.getElementById(`sellabel-${locId}`).textContent = '0 selected';
     }
