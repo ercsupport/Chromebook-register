@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ERC Chromebook Register</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+    :root {
+        --bg: #f0f2f5;
+        --surface: #ffffff;
+        --surface2: #f8f9fb;
+        --border: #e5e7eb;
+        --border2: #d1d5db;
+        --text: #1a1d23;
+        --text2: #6b7280;
+        --accent: #2563eb;
+        --accent-light: #eff6ff;
+        --high: #dc2626; --high-light: rgba(220,38,38,0.08);
+        --med: #d97706;  --med-light: rgba(217,119,6,0.08);
+        --low: #16a34a;  --low-light: rgba(22,163,74,0.08);
+        --shadow: 0 1px 4px rgba(0,0,0,0.07);
+        --shadow-md: 0 4px 16px rgba(0,0,0,0.10);
+    }
+    [data-theme="dark"] {
+        --bg: #1a2a3a;
+        --surface: #1e3448;
+        --surface2: #243d54;
+        --border: #2d4a62;
+        --border2: #365670;
+        --text: #e8edf2;
+        --text2: #7a9ab5;
+        --accent: #5b9abf;
+        --accent-light: rgba(91,154,191,0.15);
+        --high: #e07070; --high-light: rgba(224,112,112,0.10);
+        --med: #e0a040;  --med-light: rgba(224,160,64,0.10);
+        --low: #50c878;  --low-light: rgba(80,200,120,0.10);
+        --shadow: 0 1px 6px rgba(0,0,0,0.25);
+        --shadow-md: 0 4px 20px rgba(0,0,0,0.35);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; font-size: 14px; transition: background 0.25s, color 0.25s; }
+
+    /* ── LOADING ── */
+    .loading-overlay { position: fixed; inset: 0; background: var(--bg); z-index: 9000; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 12px; }
+    .loading-spinner { width: 32px; height: 32px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── LOGIN ── */
+    #loginOverlay { position: fixed; inset: 0; background: var(--bg); z-index: 4000; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; }
+    .login-logo { font-size: 22px; font-weight: 800; color: var(--text); margin-bottom: 24px; letter-spacing: -0.5px; }
+    .login-logo span { color: var(--accent); }
+    .login-box { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 32px; box-shadow: var(--shadow-md); width: 100%; max-width: 360px; }
+    .login-box h2 { font-size: 16px; font-weight: 700; margin-bottom: 20px; }
+    .login-input { width: 100%; background: var(--surface2); border: 1px solid var(--border2); border-radius: 8px; padding: 11px 14px; color: var(--text); font-family: 'Inter', sans-serif; font-size: 14px; outline: none; transition: 0.15s; margin-bottom: 10px; }
+    .login-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(91,154,191,0.15); }
+    .login-btn { width: 100%; background: var(--accent); border: none; border-radius: 8px; padding: 12px; color: white; font-family: 'Inter', sans-serif; font-size: 14px; font-weight: 600; cursor: pointer; transition: 0.15s; margin-top: 4px; }
+    .login-btn:hover { opacity: 0.9; }
+    .login-error { color: var(--high); font-size: 12px; margin-top: 8px; min-height: 16px; }
+    .login-theme { position: fixed; top: 16px; right: 16px; z-index: 4001; }
+
+    /* ── THEME TOGGLE ── */
+    .theme-toggle { position: relative; width: 56px; height: 28px; border-radius: 28px; border: none; cursor: pointer; padding: 0; background: #334155; transition: background 0.25s; flex-shrink: 0; }
+    [data-theme="light"] .theme-toggle { background: #cbd5e1; }
+    .theme-toggle-knob { position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: white; transition: transform 0.25s; display: flex; align-items: center; justify-content: center; font-size: 13px; line-height: 1; box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
+    [data-theme="light"] .theme-toggle .theme-toggle-knob { transform: translateX(28px); }
+
+    /* ── TOP NAV ── */
+    .top-nav { display: flex; align-items: center; justify-content: space-between; padding: 14px 24px; background: var(--surface); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 100; box-shadow: var(--shadow); }
+    .top-nav-title { font-size: 16px; font-weight: 800; letter-spacing: -0.3px; }
+    .top-nav-title span { color: var(--accent); }
+    .top-nav-actions { display: flex; align-items: center; gap: 8px; }
+    .sync-ind { font-size: 11px; font-weight: 500; margin-left: 2px; }
+    .btn-icon { background: var(--surface2); border: 1px solid var(--border); padding: 6px 12px; font-size: 12px; border-radius: 6px; font-weight: 500; cursor: pointer; color: var(--text); font-family: 'Inter', sans-serif; transition: 0.15s; }
+    .btn-icon:hover { border-color: var(--accent); }
+    .btn-logoff { background: none; border: 1px solid var(--border2); border-radius: 6px; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer; color: var(--text2); font-family: 'Inter', sans-serif; transition: 0.15s; }
+    .btn-logoff:hover { border-color: var(--high); color: var(--high); background: var(--high-light); }
+
+    /* ── MAIN LAYOUT ── */
+    .main { max-width: 1300px; margin: 0 auto; padding: 24px 20px; }
+
+    /* ── STATS BAR ── */
+    .stats-bar { display: flex; gap: 12px; margin-bottom: 24px; flex-wrap: wrap; }
+    .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 20px; flex: 1; min-width: 120px; box-shadow: var(--shadow); }
+    .stat-card .stat-val { font-size: 26px; font-weight: 800; color: var(--accent); line-height: 1; }
+    .stat-card .stat-lbl { font-size: 11px; color: var(--text2); font-weight: 500; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+    /* ── TOOLBAR ── */
+    .toolbar { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; align-items: center; }
+    .search-wrap { position: relative; flex: 1; min-width: 220px; }
+    .search-icon { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); font-size: 14px; pointer-events: none; }
+    .search-input { width: 100%; background: var(--surface); border: 1px solid var(--border2); border-radius: 8px; padding: 10px 36px 10px 34px; color: var(--text); font-family: 'Inter', sans-serif; font-size: 13px; outline: none; transition: 0.15s; }
+    .search-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(91,154,191,0.12); }
+    .search-clear { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: var(--text2); font-size: 14px; padding: 2px 6px; display: none; }
+    .btn-primary { background: var(--accent); border: none; border-radius: 8px; padding: 10px 18px; color: white; font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 600; cursor: pointer; transition: 0.15s; white-space: nowrap; }
+    .btn-primary:hover { opacity: 0.9; }
+    .btn-danger { background: none; border: 1px solid var(--high); color: var(--high); border-radius: 8px; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: 'Inter', sans-serif; transition: 0.15s; }
+    .btn-danger:hover { background: var(--high-light); }
+    .btn-ghost { background: none; border: 1px solid var(--border2); color: var(--text2); border-radius: 8px; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: 'Inter', sans-serif; transition: 0.15s; }
+    .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* ── LOCATION GROUPS ── */
+    .locations-grid { display: flex; flex-direction: column; gap: 16px; }
+    .loc-group { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow); }
+    .loc-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; background: var(--surface2); border-bottom: 1px solid var(--border); cursor: pointer; user-select: none; transition: background 0.15s; }
+    .loc-header:hover { background: var(--accent-light); }
+    .loc-header-left { display: flex; align-items: center; gap: 10px; }
+    .loc-name { font-size: 14px; font-weight: 700; }
+    .loc-count { background: var(--accent); color: white; border-radius: 20px; padding: 2px 9px; font-size: 11px; font-weight: 700; }
+    .loc-header-right { display: flex; align-items: center; gap: 8px; }
+    .loc-chevron { font-size: 12px; color: var(--text2); transition: transform 0.2s; }
+    .loc-group.collapsed .loc-chevron { transform: rotate(-90deg); }
+    .loc-body { padding: 12px 18px 16px; }
+    .loc-group.collapsed .loc-body { display: none; }
+
+    /* ── DEVICE GRID ── */
+    .device-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+    .device-chip { display: flex; align-items: center; gap: 6px; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; font-size: 12px; font-weight: 600; font-family: 'Inter', monospace; transition: 0.15s; cursor: default; }
+    .device-chip:hover { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(91,154,191,0.15); }
+    .device-chip .chip-del { background: none; border: none; cursor: pointer; color: var(--text2); font-size: 13px; padding: 0 0 0 4px; line-height: 1; transition: color 0.15s; }
+    .device-chip .chip-del:hover { color: var(--high); }
+    .device-chip .chip-move { background: none; border: none; cursor: pointer; color: var(--text2); font-size: 11px; padding: 0; line-height: 1; transition: color 0.15s; }
+    .device-chip .chip-move:hover { color: var(--accent); }
+
+    /* ── ADD DEVICE ROW ── */
+    .add-device-row { display: flex; gap: 8px; align-items: center; margin-top: 4px; flex-wrap: wrap; }
+    .add-device-input { background: var(--surface2); border: 1px solid var(--border2); border-radius: 8px; padding: 8px 12px; color: var(--text); font-family: 'Inter', monospace; font-size: 12px; font-weight: 600; outline: none; transition: 0.15s; width: 180px; text-transform: uppercase; }
+    .add-device-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(91,154,191,0.12); }
+    .add-device-btn { background: var(--accent); border: none; border-radius: 8px; padding: 8px 14px; color: white; font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 600; cursor: pointer; transition: 0.15s; white-space: nowrap; }
+    .add-device-btn:hover { opacity: 0.88; }
+    .loc-actions { display: flex; gap: 6px; }
+
+    /* ── EMPTY STATE ── */
+    .empty-loc { color: var(--text2); font-size: 12px; font-style: italic; padding: 4px 0 8px; }
+
+    /* ── MODAL ── */
+    .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 3000; display: flex; align-items: center; justify-content: center; padding: 20px; backdrop-filter: blur(2px); }
+    .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 28px; width: 100%; max-width: 400px; box-shadow: var(--shadow-md); }
+    .modal h3 { font-size: 15px; font-weight: 700; margin-bottom: 16px; }
+    .modal-input { width: 100%; background: var(--surface2); border: 1px solid var(--border2); border-radius: 8px; padding: 10px 13px; color: var(--text); font-family: 'Inter', sans-serif; font-size: 13px; outline: none; transition: 0.15s; margin-bottom: 12px; }
+    .modal-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(91,154,191,0.12); }
+    .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
+    .modal-cancel { background: none; border: 1px solid var(--border2); border-radius: 8px; padding: 9px 18px; font-size: 13px; font-weight: 600; cursor: pointer; color: var(--text2); font-family: 'Inter', sans-serif; transition: 0.15s; }
+    .modal-cancel:hover { border-color: var(--border); color: var(--text); }
+    .modal-confirm { background: var(--accent); border: none; border-radius: 8px; padding: 9px 18px; color: white; font-size: 13px; font-weight: 600; cursor: pointer; font-family: 'Inter', sans-serif; transition: 0.15s; }
+    .modal-confirm:hover { opacity: 0.9; }
+    .modal-confirm.danger { background: var(--high); }
+    .modal label { display: block; font-size: 11px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+    .modal select { width: 100%; background: var(--surface2); border: 1px solid var(--border2); border-radius: 8px; padding: 10px 13px; color: var(--text); font-family: 'Inter', sans-serif; font-size: 13px; outline: none; margin-bottom: 12px; }
+    .modal select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(91,154,191,0.12); }
+
+    /* ── TOAST ── */
+    .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px); background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 20px; font-size: 13px; font-weight: 500; box-shadow: var(--shadow-md); z-index: 9999; transition: transform 0.3s ease; white-space: nowrap; }
+    .toast.show { transform: translateX(-50%) translateY(0); }
+    .toast.success { border-left: 4px solid var(--low); }
+    .toast.error   { border-left: 4px solid var(--high); }
+    .toast.info    { border-left: 4px solid var(--accent); }
+
+    /* ── NO RESULTS ── */
+    .no-results { text-align: center; padding: 60px 20px; color: var(--text2); }
+    .no-results .nr-icon { font-size: 36px; margin-bottom: 12px; }
+    .no-results p { font-size: 14px; }
+
+    @media (max-width: 600px) {
+        .top-nav { padding: 12px 16px; }
+        .main { padding: 16px 12px; }
+        .stats-bar { gap: 8px; }
+        .stat-card { padding: 12px 14px; }
+        .stat-card .stat-val { font-size: 20px; }
+    }
+</style>
+</head>
+<body>
+
+<!-- Loading -->
+<div class="loading-overlay" id="loadingOverlay">
+    <div class="loading-spinner"></div>
+    <span style="font-size:13px; color:var(--text2);">Loading...</span>
+</div>
+
+<!-- Login -->
+<div id="loginOverlay" style="display:none;">
+    <div style="width:100%;max-width:360px;display:flex;justify-content:flex-end;margin-bottom:12px;">
+        <button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme"><span class="theme-toggle-knob">☀️</span></button>
+    </div>
+    <div class="login-logo">ERC <span>Chromebook</span> Register</div>
+    <div class="login-box">
+        <h2>Admin Login</h2>
+        <input class="login-input" id="emailInput" type="email" placeholder="Email" autocomplete="username">
+        <input class="login-input" id="passInput" type="password" placeholder="Password" autocomplete="current-password" onkeydown="if(event.key==='Enter')handleAuth()">
+        <button class="login-btn" id="loginBtn" onclick="handleAuth()">Sign In</button>
+        <div class="login-error" id="loginError"></div>
+    </div>
+</div>
+
+<!-- App -->
+<div id="app" style="display:none;">
+    <div class="top-nav">
+        <div style="display:flex;align-items:center;gap:12px;">
+            <div class="top-nav-title">ERC <span>Chromebook</span> Register</div>
+            <span class="sync-ind" id="syncStat" style="color:var(--med)">● Connecting...</span>
+        </div>
+        <div class="top-nav-actions">
+            <button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme"><span class="theme-toggle-knob">☀️</span></button>
+            <button class="btn-icon" onclick="loadData()">🔄 Refresh</button>
+            <button class="btn-logoff" onclick="handleLogout()">Log Off</button>
+        </div>
+    </div>
+
+    <div class="main">
+        <!-- Stats -->
+        <div class="stats-bar">
+            <div class="stat-card"><div class="stat-val" id="statDevices">—</div><div class="stat-lbl">Total Devices</div></div>
+            <div class="stat-card"><div class="stat-val" id="statLocations">—</div><div class="stat-lbl">Locations</div></div>
+            <div class="stat-card"><div class="stat-val" id="statAvg">—</div><div class="stat-lbl">Avg per Location</div></div>
+        </div>
+
+        <!-- Toolbar -->
+        <div class="toolbar">
+            <div class="search-wrap">
+                <span class="search-icon">🔍</span>
+                <input class="search-input" id="searchInput" placeholder="Search by serial number or location..." oninput="applySearch(this.value)">
+                <button class="search-clear" id="searchClear" onclick="clearSearch()">✕</button>
+            </div>
+            <button class="btn-primary" onclick="openAddLocation()">＋ Add Location</button>
+        </div>
+
+        <!-- Locations -->
+        <div class="locations-grid" id="locationsGrid"></div>
+    </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<!-- Modal -->
+<div class="modal-bg" id="modalBg" style="display:none;" onclick="if(event.target===this)closeModal()">
+    <div class="modal" id="modal"></div>
+</div>
+
+<script>
+    const SUPABASE_URL = 'https://dgxviyzqkyxcvjmfdltb.supabase.co';
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRneHZpeXpxa3l4Y3ZqbWZkbHRiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMyMzg5NzUsImV4cCI6MjA4ODgxNDk3NX0.8JmuC5olxu34qzV_kh0l7UvUq3Iq-4y5YL9O8_AgdW4';
+    const { createClient } = supabase;
+    const sb = createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false } });
+
+    let _locations = [];
+    let _devices = [];
+
+    // ── THEME ──
+    (function() {
+        const saved = localStorage.getItem('erc-theme') || 'dark';
+        document.documentElement.setAttribute('data-theme', saved);
+        window._savedTheme = saved;
+    })();
+
+    function toggleTheme() {
+        const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+        const t = isDark ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', t);
+        localStorage.setItem('erc-theme', t);
+        updateThemeKnobs(t);
+    }
+    function updateThemeKnobs(theme) {
+        const icon = theme === 'dark' ? '☀️' : '🌙';
+        document.querySelectorAll('.theme-toggle-knob').forEach(k => k.textContent = icon);
+    }
+
+    // ── TOAST ──
+    let _toastTimer;
+    function toast(msg, type='success') {
+        const t = document.getElementById('toast');
+        t.textContent = msg;
+        t.className = `toast ${type} show`;
+        clearTimeout(_toastTimer);
+        _toastTimer = setTimeout(() => t.classList.remove('show'), 3000);
+    }
+
+    // ── INACTIVITY ──
+    const INACTIVE_MS = 5 * 60 * 1000;
+    let inactivityTimer;
+    function resetInactivityTimer() {
+        clearTimeout(inactivityTimer);
+        inactivityTimer = setTimeout(async () => {
+            await sb.auth.signOut();
+            alert('You have been logged out due to inactivity.');
+            location.reload();
+        }, INACTIVE_MS);
+    }
+    function startInactivityWatcher() {
+        ['mousemove','keydown','mousedown','touchstart','scroll','click'].forEach(e =>
+            document.addEventListener(e, resetInactivityTimer, { passive: true }));
+        resetInactivityTimer();
+    }
+
+    // ── AUTH ──
+    async function handleAuth() {
+        const email = document.getElementById('emailInput').value.trim();
+        const pass  = document.getElementById('passInput').value;
+        const btn   = document.getElementById('loginBtn');
+        const err   = document.getElementById('loginError');
+        err.textContent = '';
+        btn.textContent = 'Signing in...';
+        btn.disabled = true;
+        const { error } = await sb.auth.signInWithPassword({ email, password: pass });
+        if (error) {
+            err.textContent = 'Invalid email or password.';
+            btn.textContent = 'Sign In';
+            btn.disabled = false;
+        } else {
+            showApp();
+        }
+    }
+
+    async function handleLogout() {
+        await sb.auth.signOut();
+        location.reload();
+    }
+
+    async function init() {
+        document.getElementById('loadingOverlay').style.display = 'flex';
+        const { data: { session } } = await sb.auth.getSession();
+        document.getElementById('loadingOverlay').style.display = 'none';
+        updateThemeKnobs(window._savedTheme || 'dark');
+        if (session) {
+            showApp();
+        } else {
+            document.getElementById('loginOverlay').style.display = 'flex';
+        }
+    }
+
+    function showApp() {
+        document.getElementById('loginOverlay').style.display = 'none';
+        document.getElementById('app').style.display = 'block';
+        loadData();
+        startInactivityWatcher();
+        setInterval(loadData, 60000);
+    }
+
+    // ── DATA ──
+    async function loadData() {
+        document.getElementById('syncStat').textContent = '● Syncing...';
+        document.getElementById('syncStat').style.color = 'var(--med)';
+
+        const [{ data: locs, error: e1 }, { data: devs, error: e2 }] = await Promise.all([
+            sb.from('locations').select('*').order('name'),
+            sb.from('devices').select('*').order('serial_number')
+        ]);
+
+        if (e1 || e2) {
+            document.getElementById('syncStat').textContent = '● Error';
+            document.getElementById('syncStat').style.color = 'var(--high)';
+            return;
+        }
+
+        _locations = locs || [];
+        _devices   = devs || [];
+
+        document.getElementById('syncStat').textContent = '● Live';
+        document.getElementById('syncStat').style.color = 'var(--low)';
+
+        updateStats();
+        const q = document.getElementById('searchInput').value;
+        applySearch(q);
+    }
+
+    function updateStats() {
+        document.getElementById('statDevices').textContent = _devices.length;
+        document.getElementById('statLocations').textContent = _locations.length;
+        const avg = _locations.length ? Math.round(_devices.length / _locations.length) : 0;
+        document.getElementById('statAvg').textContent = avg;
+    }
+
+    // ── RENDER ──
+    function applySearch(q) {
+        const sq = q.trim().toLowerCase();
+        document.getElementById('searchClear').style.display = sq ? 'block' : 'none';
+
+        if (!sq) {
+            renderLocations(_locations, _devices);
+            return;
+        }
+
+        // Filter devices by serial
+        const filteredDevs = _devices.filter(d => d.serial_number.toLowerCase().includes(sq));
+        // Filter locations by name OR those containing matching devices
+        const matchedLocIds = new Set(filteredDevs.map(d => d.location_id));
+        const filteredLocs = _locations.filter(l =>
+            l.name.toLowerCase().includes(sq) || matchedLocIds.has(l.id)
+        );
+        // If searching by location name, show all devices in that location
+        const locsMatchedByName = _locations.filter(l => l.name.toLowerCase().includes(sq));
+        const locNameIds = new Set(locsMatchedByName.map(l => l.id));
+        const devsToShow = _devices.filter(d =>
+            d.serial_number.toLowerCase().includes(sq) || locNameIds.has(d.location_id)
+        );
+
+        renderLocations(filteredLocs, devsToShow, sq);
+    }
+
+    function clearSearch() {
+        document.getElementById('searchInput').value = '';
+        document.getElementById('searchClear').style.display = 'none';
+        renderLocations(_locations, _devices);
+    }
+
+    function renderLocations(locs, devs, highlight='') {
+        const grid = document.getElementById('locationsGrid');
+
+        if (locs.length === 0) {
+            grid.innerHTML = `<div class="no-results"><div class="nr-icon">🔍</div><p>No locations or devices found.</p></div>`;
+            return;
+        }
+
+        grid.innerHTML = locs.map(loc => {
+            const locDevs = devs.filter(d => d.location_id === loc.id);
+            const chips = locDevs.map(d => {
+                const serial = highlight ? highlightText(d.serial_number, highlight) : d.serial_number;
+                return `<div class="device-chip" title="${d.serial_number}">
+                    <span>${serial}</span>
+                    <button class="chip-move" onclick="openMoveDevice(${d.id},'${d.serial_number}',${loc.id})" title="Move to another location">⇄</button>
+                    <button class="chip-del" onclick="deleteDevice(${d.id},'${d.serial_number}')" title="Remove device">✕</button>
+                </div>`;
+            }).join('');
+
+            const locName = highlight ? highlightText(loc.name, highlight) : loc.name;
+
+            return `<div class="loc-group" id="loc-${loc.id}">
+                <div class="loc-header" onclick="toggleCollapse(${loc.id})">
+                    <div class="loc-header-left">
+                        <span class="loc-name">${locName}</span>
+                        <span class="loc-count">${locDevs.length}</span>
+                    </div>
+                    <div class="loc-header-right">
+                        <div class="loc-actions" onclick="event.stopPropagation()">
+                            <button class="btn-ghost" onclick="openRenameLocation(${loc.id},'${escQ(loc.name)}')">✏️ Rename</button>
+                            <button class="btn-danger" onclick="deleteLocation(${loc.id},'${escQ(loc.name)}')">🗑 Delete</button>
+                        </div>
+                        <span class="loc-chevron">▼</span>
+                    </div>
+                </div>
+                <div class="loc-body">
+                    <div class="device-grid">
+                        ${chips || `<span class="empty-loc">No devices assigned yet.</span>`}
+                    </div>
+                    <div class="add-device-row">
+                        <input class="add-device-input" id="newdev-${loc.id}" placeholder="Serial number" onkeydown="if(event.key==='Enter')addDevice(${loc.id})" oninput="this.value=this.value.toUpperCase()">
+                        <button class="add-device-btn" onclick="addDevice(${loc.id})">＋ Add Device</button>
+                    </div>
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    function highlightText(text, q) {
+        const idx = text.toLowerCase().indexOf(q.toLowerCase());
+        if (idx === -1) return text;
+        return text.slice(0, idx) + `<mark style="background:rgba(91,154,191,0.3);border-radius:3px;padding:0 2px;">${text.slice(idx, idx + q.length)}</mark>` + text.slice(idx + q.length);
+    }
+
+    function escQ(str) { return str.replace(/'/g, "\\'"); }
+
+    function toggleCollapse(locId) {
+        document.getElementById(`loc-${locId}`).classList.toggle('collapsed');
+    }
+
+    // ── ADD LOCATION ──
+    function openAddLocation() {
+        showModal(`
+            <h3>➕ New Location</h3>
+            <label>Location Name</label>
+            <input class="modal-input" id="mLocName" placeholder="e.g. Art Room, Library, SEN..." autofocus>
+            <div class="modal-actions">
+                <button class="modal-cancel" onclick="closeModal()">Cancel</button>
+                <button class="modal-confirm" onclick="confirmAddLocation()">Create</button>
+            </div>
+        `);
+        setTimeout(() => document.getElementById('mLocName')?.focus(), 100);
+    }
+
+    async function confirmAddLocation() {
+        const name = document.getElementById('mLocName').value.trim();
+        if (!name) return;
+        closeModal();
+        const { error } = await sb.from('locations').insert({ name });
+        if (error) { toast('Error: ' + error.message, 'error'); return; }
+        toast(`Location "${name}" created.`);
+        await loadData();
+    }
+
+    // ── RENAME LOCATION ──
+    function openRenameLocation(id, name) {
+        showModal(`
+            <h3>✏️ Rename Location</h3>
+            <label>New Name</label>
+            <input class="modal-input" id="mRenName" value="${name}" autofocus>
+            <div class="modal-actions">
+                <button class="modal-cancel" onclick="closeModal()">Cancel</button>
+                <button class="modal-confirm" onclick="confirmRename(${id})">Save</button>
+            </div>
+        `);
+        setTimeout(() => { const i = document.getElementById('mRenName'); if(i){i.focus();i.select();} }, 100);
+    }
+
+    async function confirmRename(id) {
+        const name = document.getElementById('mRenName').value.trim();
+        if (!name) return;
+        closeModal();
+        const { error } = await sb.from('locations').update({ name }).eq('id', id);
+        if (error) { toast('Error: ' + error.message, 'error'); return; }
+        toast('Location renamed.');
+        await loadData();
+    }
+
+    // ── DELETE LOCATION ──
+    function deleteLocation(id, name) {
+        const count = _devices.filter(d => d.location_id === id).length;
+        showModal(`
+            <h3>🗑 Delete Location</h3>
+            <p style="color:var(--text2);font-size:13px;margin-bottom:16px;">
+                Delete <strong style="color:var(--text)">${name}</strong>?
+                ${count > 0 ? `<br><br><span style="color:var(--high)">⚠️ This location has <strong>${count} device(s)</strong>. They will become unassigned.</span>` : ''}
+            </p>
+            <div class="modal-actions">
+                <button class="modal-cancel" onclick="closeModal()">Cancel</button>
+                <button class="modal-confirm danger" onclick="confirmDeleteLocation(${id})">Delete</button>
+            </div>
+        `);
+    }
+
+    async function confirmDeleteLocation(id) {
+        closeModal();
+        const { error } = await sb.from('locations').delete().eq('id', id);
+        if (error) { toast('Error: ' + error.message, 'error'); return; }
+        toast('Location deleted.', 'info');
+        await loadData();
+    }
+
+    // ── ADD DEVICE ──
+    async function addDevice(locId) {
+        const input = document.getElementById(`newdev-${locId}`);
+        const serial = input.value.trim().toUpperCase();
+        if (!serial) return;
+
+        // Check duplicate
+        const exists = _devices.find(d => d.serial_number === serial);
+        if (exists) {
+            const existLoc = _locations.find(l => l.id === exists.location_id);
+            toast(`${serial} already exists in "${existLoc?.name || 'Unknown'}"`, 'error');
+            return;
+        }
+
+        const { error } = await sb.from('devices').insert({ serial_number: serial, location_id: locId });
+        if (error) { toast('Error: ' + error.message, 'error'); return; }
+        input.value = '';
+        toast(`${serial} added.`);
+        await loadData();
+    }
+
+    // ── MOVE DEVICE ──
+    function openMoveDevice(devId, serial, currentLocId) {
+        const options = _locations
+            .filter(l => l.id !== currentLocId)
+            .map(l => `<option value="${l.id}">${l.name}</option>`)
+            .join('');
+
+        if (!options) { toast('No other locations to move to.', 'info'); return; }
+
+        showModal(`
+            <h3>⇄ Move Device</h3>
+            <p style="color:var(--text2);font-size:13px;margin-bottom:14px;">Moving <strong style="color:var(--text);font-family:monospace;">${serial}</strong></p>
+            <label>Move to Location</label>
+            <select id="mMoveLoc">${options}</select>
+            <div class="modal-actions">
+                <button class="modal-cancel" onclick="closeModal()">Cancel</button>
+                <button class="modal-confirm" onclick="confirmMove(${devId},'${serial}')">Move</button>
+            </div>
+        `);
+    }
+
+    async function confirmMove(devId, serial) {
+        const newLocId = document.getElementById('mMoveLoc').value;
+        closeModal();
+        const { error } = await sb.from('devices').update({ location_id: newLocId }).eq('id', devId);
+        if (error) { toast('Error: ' + error.message, 'error'); return; }
+        const newLoc = _locations.find(l => l.id == newLocId);
+        toast(`${serial} moved to "${newLoc?.name}".`);
+        await loadData();
+    }
+
+    // ── DELETE DEVICE ──
+    function deleteDevice(id, serial) {
+        showModal(`
+            <h3>🗑 Remove Device</h3>
+            <p style="color:var(--text2);font-size:13px;margin-bottom:16px;">Remove <strong style="color:var(--text);font-family:monospace;">${serial}</strong> from the register?</p>
+            <div class="modal-actions">
+                <button class="modal-cancel" onclick="closeModal()">Cancel</button>
+                <button class="modal-confirm danger" onclick="confirmDeleteDevice(${id},'${serial}')">Remove</button>
+            </div>
+        `);
+    }
+
+    async function confirmDeleteDevice(id, serial) {
+        closeModal();
+        const { error } = await sb.from('devices').delete().eq('id', id);
+        if (error) { toast('Error: ' + error.message, 'error'); return; }
+        toast(`${serial} removed.`, 'info');
+        await loadData();
+    }
+
+    // ── MODAL ──
+    function showModal(html) {
+        document.getElementById('modal').innerHTML = html;
+        document.getElementById('modalBg').style.display = 'flex';
+    }
+    function closeModal() {
+        document.getElementById('modalBg').style.display = 'none';
+    }
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+    init();
+</script>
+</body>
+</html>
